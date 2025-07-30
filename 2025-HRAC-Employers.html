@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>ICHRA & QSEHRA Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
+    .title {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: #f0f0f0;
+      padding: 10px;
+      z-index: 2;
+      border-radius: 4px;
+      font-family: 'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      max-width: 300px;
+      line-height: 1.4em;
+    }
+
+    .toggle {
+  font-size: 16px;
+  font-weight: 600;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #f0f0f0;
+      padding: 10px;
+      z-index: 2;
+      border-radius: 4px;
+      font-family: 'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      line-height: 1.4em;
+    }
+
+    .legend {
+      position: absolute;
+      bottom: 30px;
+      left: 10px;
+      background: #f0f0f0;
+      padding: 10px;
+      font-family: 'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 12px;
+      border-radius: 4px;
+      z-index: 1;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    .circle-swatch {
+      display: inline-block;
+      border-radius: 50%;
+      background-color: #4FB848;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin-right: 6px;
+      cursor: pointer;
+      vertical-align: middle;
+      accent-color: #ccc;
+    }
+
+    #toggle-ichra { accent-color: #006F3E; }
+    #toggle-qshera { accent-color: #7A7FCA; }
+
+    label {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="title">
+  <strong>ICHRA & QSEHRA Adoption among US Employers (2025)</strong>
+  <p style="margin: 6px 0 0 0;">This map is based on data shared by HRA Council Members participating in "Growth Trends for ICHRA & QSEHRA: Vol. 4" (2025). As with our signature annual data report, the map is based only on available data shared by some eligible HRA Council Members. Therefore, it is not intended to convey the full size and scope of the ICHRA/QSEHRA market, but a substantial sample. Circles indicate employers offering ICHRA/QSEHRA as a health benefit in 2025.</p>
+
+</div>
+
+<div class="toggle">
+  <div style="margin-bottom: 6px; font-weight: bold;">Filter/Unfilter Here:</div>
+  <label><input type="checkbox" id="toggle-ichra" checked><span>Employers Offering ICHRA</span></label>
+  <label><input type="checkbox" id="toggle-qshera" checked><span>Employers Offering QSEHRA</span></label>
+  <label><input type="checkbox" id="toggle-ale" checked><span>Large Employers</span></label>
+  <label><input type="checkbox" id="toggle-nonale" checked><span>Non-Large Employers</span></label>
+</div>
+
+<div class="legend">
+  <strong>Employees Offered HRAs as a Health Benefit</strong><br>
+  <div><span class="circle-swatch" style="width:4px; height:4px;"></span> approx.5</div>
+  <div><span class="circle-swatch" style="width:6px; height:6px;"></span> approx.20</div>
+  <div><span class="circle-swatch" style="width:8px; height:8px;"></span> approx.50</div>
+  <div><span class="circle-swatch" style="width:11px; height:11px;"></span> approx.150</div>
+  <div><span class="circle-swatch" style="width:14px; height:14px;"></span> approx.250</div>
+  <div><span class="circle-swatch" style="width:20px; height:20px;"></span> >500</div>
+</div>
+
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoiaHJhY291bmNpbCIsImEiOiJjbWQ2OTVscWkwNzg0Mm1wczN1a2dybmd1In0.omasVaTqz8i1i-aKPYAmog';
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/hracouncil/cmdmgslf301nc01sa6fwo7bwp',
+});
+map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+
+map.on('load', () => {
+  map.fitBounds([[-125, 24], [-66.5, 49]], { padding: 20 });
+
+  const ICHRA_LAYER = 'Employers Offering ICHRA';
+  const QSEHRA_LAYER = 'Employers Offering QSEHRA';
+
+  const applyALEFilter = () => {
+    const showALE = document.getElementById('toggle-ale').checked;
+    const showNonALE = document.getElementById('toggle-nonale').checked;
+
+    let aleFilter = ['in', ['get', 'ALE'], ['literal', ['Yes', 'YES', 'No']]];
+    if (!showALE || !showNonALE) {
+      const allowed = [];
+      if (showALE) allowed.push('Yes', 'YES');
+      if (showNonALE) allowed.push('No');
+      aleFilter = ['in', ['get', 'ALE'], ['literal', allowed]];
+    }
+
+    const ichraFilter = ['all', ['==', ['get', 'Type_of_HRA'], 'ICHRA'], aleFilter];
+    const qsheraFilter = ['all', ['==', ['get', 'Type_of_HRA'], 'QSEHRA'], aleFilter];
+
+    map.setFilter(ICHRA_LAYER, ichraFilter);
+    map.setFilter(QSEHRA_LAYER, qsheraFilter);
+  };
+
+  document.getElementById('toggle-ichra').addEventListener('change', (e) => {
+    map.setLayoutProperty(ICHRA_LAYER, 'visibility', e.target.checked ? 'visible' : 'none');
+  });
+
+  document.getElementById('toggle-qshera').addEventListener('change', (e) => {
+    map.setLayoutProperty(QSEHRA_LAYER, 'visibility', e.target.checked ? 'visible' : 'none');
+  });
+
+  document.getElementById('toggle-ale').addEventListener('change', applyALEFilter);
+  document.getElementById('toggle-nonale').addEventListener('change', applyALEFilter);
+
+  applyALEFilter();
+
+  [ICHRA_LAYER, QSEHRA_LAYER].forEach(layer => {
+    map.on('click', layer, (e) => {
+      const p = e.features[0].properties;
+      const city = p["Geocodio City"] || '';
+      const state = p["Geocodio State"] || '';
+      const location = city && state ? `${city}, ${state}` : (city || state || 'N/A');
+
+      const popupHTML = `
+        <strong>HRA Type:</strong> ${p.Type_of_HRA || 'N/A'}<br>
+        <strong>Applicable Large Employer?</strong> ${p.ALE || 'N/A'}<br>
+        <strong>Employees Offered HRA:</strong> ${p.Eligible_Employee_Lives || 'N/A'}
+      `;
+      new mapboxgl.Popup().setLngLat(e.lngLat).setHTML(popupHTML).addTo(map);
+    });
+    map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', layer, () => map.getCanvas().style.cursor = '');
+  });
+});
+</script>
+
+</body>
+</html>
