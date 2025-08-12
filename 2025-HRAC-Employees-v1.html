@@ -19,22 +19,6 @@
     .title h1{ font-size:16px; margin:0 0 6px 0; }
     .title p{ margin:0; font-size:14px; line-height:1.4; color:var(--muted); }
 
-    .controls{ position:absolute; top:10px; right:10px; z-index:2; font-size:13px; line-height:1.3; width:300px; max-height:60vh; overflow:auto; padding-bottom:4px; }
-
-    /* Accordion */
-    .section{ border:1px solid rgba(0,0,0,.08); border-radius:6px; margin-bottom:8px; overflow:hidden; }
-    .section .header{ display:flex; justify-content:space-between; align-items:center; padding:10px; cursor:pointer; user-select:none; background:rgba(0,0,0,.04); }
-    .section .header h2{ font-size:12px; text-transform:uppercase; letter-spacing:.04em; margin:0; opacity:.9; }
-    .chev{ transition:transform .15s ease; }
-    .section.collapsed .chev{ transform:rotate(-90deg); }
-    .section .content{ padding:10px; display:block; }
-    .section.collapsed .content{ display:none; }
-
-    /* Compact checkbox grid */
-    .grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:6px 10px; }
-    .chip{ display:flex; align-items:center; gap:6px; }
-    .chip input[type="checkbox"]{ width:14px; height:14px; accent-color:#333; cursor:pointer; }
-
     .legend{ position:absolute; left:10px; bottom:30px; z-index:1; font-size:12px; }
     .legend .color-row{ display:flex; align-items:center; gap:8px; margin:4px 0; }
     .swatch{ width:14px; height:14px; border-radius:3px; display:inline-block; }
@@ -48,15 +32,7 @@
 
 <div class="panel title">
   <h1>U.S. Employees Enrolled in Health Coverage via ICHRA/QSEHRA</h1>
-  <p>Employee-level point locations derived from data shared by participating HRA Council Members. Use the Plan Type filter to highlight metal tiers. Click any point for age, dependents, and plan detail.</p>
-</div>
-
-<div class="panel controls" id="controls">
-  <!-- Plan ONLY -->
-  <div class="section" id="sec-plan">
-    <div class="header"><h2>Plan Type</h2><span class="chev">▾</span></div>
-    <div class="content"><div class="grid" id="plan-group"></div></div>
-  </div>
+  <p>Employee-level point locations derived from data shared by participating HRA Council Members. Click any point for age, dependents, and plan details.</p>
 </div>
 
 <div class="panel legend">
@@ -84,29 +60,10 @@
   // === CONFIG ===
   mapboxgl.accessToken = 'pk.eyJ1IjoiaHJhY291bmNpbCIsImEiOiJjbWQ2OTVscWkwNzg0Mm1wczN1a2dybmd1In0.omasVaTqz8i1i-aKPYAmog';
   const STYLE_URL = 'mapbox://styles/hracouncil/cmdsy6waj00p101qp8segfi94?v=2025-08-12';
-  const LAYER_DOTS = 'Employee Dots';
+  const LAYER_DOTS = 'Employee Dots'; // exact layer name in Studio
 
   // Field keys (dot layer only)
   const FIELDS = { age: 'Employee_Age', deps: 'Dependents', plan: 'Gold' };
-
-  const PLAN_OPTIONS = ['Bronze','Expanded Bronze','Silver','Gold','Platinum','Catastrophic','Medicare Advantage'];
-
-  // Build checkbox group for Plan
-  function addChecks(containerId, items, idPrefix){
-    const el = document.getElementById(containerId); el.innerHTML='';
-    items.forEach((label,i)=>{
-      const id = idPrefix+"-"+i;
-      const wrap = document.createElement('label'); wrap.className='chip';
-      wrap.innerHTML = `<input type="checkbox" id="${id}" checked> <span>${label}</span>`;
-      el.appendChild(wrap);
-    });
-  }
-  addChecks('plan-group', PLAN_OPTIONS, 'plan');
-
-  // Accordion wiring
-  document.querySelectorAll('.section .header').forEach(h=>{
-    h.addEventListener('click', ()=> h.parentElement.classList.toggle('collapsed'));
-  });
 
   // Map init
   const map = new mapboxgl.Map({
@@ -117,15 +74,16 @@
   });
   map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
 
-  // Resolve sub-layers in case Studio renamed
+  // Resolve layer id(s) safely (handles Studio auto-suffixes)
   function resolveLayerIds(label){
     const norm = s => String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
     const want = norm(label); const ids=[];
-    (map.getStyle().layers||[]).forEach(l=>{
+    function check(){ (map.getStyle().layers||[]).forEach(l=>{
       const idMatch=norm(l.id).includes(want);
       const srcMatch=norm(l['source-layer']||'').includes(want);
       if(idMatch||srcMatch) ids.push(l.id);
-    });
+    }); }
+    check();
     return ids.length? ids : [label];
   }
 
@@ -134,47 +92,10 @@
 
     const DOT_LAYER_IDS = resolveLayerIds(LAYER_DOTS);
 
-    // helpers
-    function getSelected(prefix, labels){
-      const out=[]; labels.forEach((lbl,i)=>{ const el=document.getElementById(`${prefix}-${i}`); if(el&&el.checked) out.push(lbl); }); return out;
-    }
-
-    function buildPlanFilter(){
-      const sel = getSelected('plan', PLAN_OPTIONS);
-      if(sel.length === PLAN_OPTIONS.length) return null; if(sel.length===0) return ['literal', false];
-      const upper = sel.map(s=>s.toUpperCase());
-      const any=['any'];
-      const candidates=[ ['upcase',['get',FIELDS.plan]], ['upcase',['get','Plan']], ['upcase',['get','Metal']], ['upcase',['get','top_metal']] ];
-      candidates.forEach(expr=> any.push(['in',expr,['literal',upper]]));
-      // Also accept boolean/1/yes flags if present (e.g., "gold"=1)
-      upper.forEach(p=>{
-        const k=p.toLowerCase();
-        any.push(['any',
-          ['==',['downcase',['get',k]],'yes'],
-          ['==',['to-number',['get',k]],1],
-          ['==',['get',k],true]
-        ]);
-      });
-      return any;
-    }
-
-    function applyFilters(){
-      const fDots = buildPlanFilter();
-      DOT_LAYER_IDS.forEach(id=> map.setFilter(id, fDots));
-    }
-
-    // Wire listeners
-    for(let i=0;i<PLAN_OPTIONS.length;i++){
-      const el=document.getElementById(`plan-${i}`);
-      if(el) el.addEventListener('change', applyFilters);
-    }
-
-    applyFilters();
-
     // Popups for dots only
     DOT_LAYER_IDS.forEach(id=>{
       map.on('click', id, e=>{
-        const p=e.features[0].properties;
+        const p=e.features[0].properties || {};
         new mapboxgl.Popup().setLngLat(e.lngLat).setHTML(`
           <strong>Age:</strong> ${p[FIELDS.age] ?? 'N/A'}<br>
           <strong>Dependents:</strong> ${p[FIELDS.deps] ?? 'N/A'}<br>
